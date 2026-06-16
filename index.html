@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>제안요청서 과업 추출 콘솔</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#ECEFF3; --surface:#FFFFFF; --ink:#16191F; --muted:#646B78;
+    --line:#D9DEE6; --line-strong:#C2C9D4;
+    --accent:#1F4FE0; --accent-dk:#1A40B8;
+    --ok:#157A4E; --ok-bg:#E7F3EC;
+    --warn:#B26A00; --warn-bg:#FBF1DF;
+    --err:#C0362C; --err-bg:#FBE9E7;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:"Pretendard","Pretendard Variable",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--sans); background:var(--paper); color:var(--ink);
+    line-height:1.5; -webkit-font-smoothing:antialiased; font-size:14px;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:28px 22px 80px}
+
+  /* ── 헤더: 원장(ledger) 스트립 ── */
+  header.top{
+    display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+    gap:18px; padding-bottom:18px; border-bottom:2px solid var(--ink); margin-bottom:24px;
+  }
+  .title h1{font-size:21px; font-weight:800; letter-spacing:-.02em; margin:0}
+  .title p{margin:6px 0 0; color:var(--muted); font-size:13px}
+  .ledger{display:flex; gap:0; border:1px solid var(--line-strong); background:var(--surface)}
+  .ledger .cell{padding:9px 16px; border-right:1px solid var(--line); text-align:right; min-width:74px}
+  .ledger .cell:last-child{border-right:0}
+  .ledger .k{font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+  .ledger .v{font-family:var(--mono); font-size:19px; font-weight:600; margin-top:2px}
+  .ledger .v.accent{color:var(--accent)}
+
+  .grid{display:grid; grid-template-columns:340px 1fr; gap:22px}
+  @media (max-width:860px){ .grid{grid-template-columns:1fr} }
+
+  .panel{background:var(--surface); border:1px solid var(--line-strong)}
+  .panel h2{
+    font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    margin:0; padding:12px 16px; border-bottom:1px solid var(--line);
+  }
+  .panel .body{padding:16px}
+
+  label.field{display:block; margin-bottom:14px}
+  label.field:last-child{margin-bottom:0}
+  label.field .lab{font-size:12px; font-weight:600; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center}
+  label.field .lab .hint{font-weight:400; color:var(--muted); font-size:11px}
+  input[type=text],input[type=password],input[type=number],textarea,select{
+    width:100%; font-family:var(--sans); font-size:13px; color:var(--ink);
+    border:1px solid var(--line-strong); background:#FCFCFD; padding:9px 11px; border-radius:0;
+  }
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:var(--accent)}
+  textarea{resize:vertical; min-height:78px; line-height:1.55}
+  .mono{font-family:var(--mono)}
+  .row2{display:flex; gap:10px}
+  .row2 > *{flex:1}
+  .check{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted); margin-top:7px}
+  .check input{width:auto}
+
+  details.prompt{margin-top:4px; border:1px solid var(--line)}
+  details.prompt summary{cursor:pointer; padding:9px 12px; font-size:12px; font-weight:600; list-style:none; background:#F7F8FA}
+  details.prompt summary::-webkit-details-marker{display:none}
+  details.prompt summary::before{content:"▸ "; color:var(--muted)}
+  details.prompt[open] summary::before{content:"▾ "}
+  details.prompt .body{padding:12px}
+
+  /* ── 드롭존 ── */
+  .drop{
+    border:1.5px dashed var(--line-strong); background:#FBFCFD; text-align:center;
+    padding:26px 16px; cursor:pointer; transition:.12s; color:var(--muted);
+  }
+  .drop:hover,.drop.over{border-color:var(--accent); background:#F3F6FF; color:var(--accent)}
+  .drop strong{display:block; color:var(--ink); font-size:14px; margin-bottom:3px}
+
+  /* ── 버튼 ── */
+  .btns{display:flex; gap:10px; margin-top:16px; flex-wrap:wrap}
+  button{font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; padding:10px 16px; border-radius:0; background:none}
+  button.primary{background:var(--accent); color:#fff}
+  button.primary:hover{background:var(--accent-dk)}
+  button.ghost{border-color:var(--line-strong); color:var(--ink); background:var(--surface)}
+  button.ghost:hover{border-color:var(--ink)}
+  button.danger{border-color:var(--err); color:var(--err); background:var(--surface)}
+  button.danger:hover{background:var(--err-bg)}
+  button:disabled{opacity:.4; cursor:not-allowed}
+
+  /* ── 진행 바 ── */
+  .progress-wrap{margin:18px 0 4px; display:none}
+  .progress-wrap.show{display:block}
+  .bar{height:6px; background:var(--line); overflow:hidden}
+  .bar > i{display:block; height:100%; width:0; background:var(--accent); transition:width .25s}
+  .progress-meta{display:flex; justify-content:space-between; font-size:11.5px; color:var(--muted); margin-top:6px; font-family:var(--mono)}
+
+  /* ── 배너 ── */
+  .banner{display:none; padding:13px 15px; border-left:4px solid; font-size:13px; margin-bottom:16px; background:var(--surface)}
+  .banner.show{display:block}
+  .banner.quota{border-color:var(--warn); background:var(--warn-bg)}
+  .banner.done{border-color:var(--ok); background:var(--ok-bg)}
+  .banner b{display:block; margin-bottom:4px}
+  .banner ol{margin:6px 0 0 18px; padding:0}
+  .banner li{margin:2px 0}
+
+  /* ── 파일 원장 ── */
+  .files{margin-top:2px}
+  .file{display:grid; grid-template-columns:26px 1fr auto; gap:12px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); font-size:13px}
+  .file:last-child{border-bottom:0}
+  .tick{width:18px; height:18px; border:1.5px solid var(--line-strong); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-family:var(--mono)}
+  .tick.done{border-color:var(--ok); color:var(--ok)}
+  .tick.run{border-color:var(--accent); border-top-color:transparent; animation:spin .7s linear infinite}
+  .tick.err{border-color:var(--err); color:var(--err)}
+  .tick.skip{border-color:var(--line-strong); color:var(--muted)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .fstat{font-family:var(--mono); font-size:11.5px; color:var(--muted); white-space:nowrap}
+  .fstat.done{color:var(--ok)} .fstat.err{color:var(--err)} .fstat.run{color:var(--accent)}
+  .empty-files{padding:26px; text-align:center; color:var(--muted); font-size:13px}
+
+  /* ── 결과 표 ── */
+  .result-head{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line)}
+  .result-head h2{border:0; padding:0}
+  .tablewrap{overflow:auto; max-height:540px}
+  table.out{border-collapse:collapse; width:100%; font-size:12px}
+  table.out th,table.out td{border-bottom:1px solid var(--line); border-right:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top}
+  table.out thead th{position:sticky; top:0; background:#F2F4F7; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); z-index:1}
+  table.out td.num{font-family:var(--mono); color:var(--muted); white-space:nowrap}
+  table.out td.tag{white-space:nowrap; font-size:11px}
+  table.out tbody tr:hover{background:#F7F9FC}
+  .preview-note{padding:9px 16px; font-size:11.5px; color:var(--muted); border-top:1px solid var(--line)}
+
+  footer{margin-top:30px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:11.5px; line-height:1.7}
+  code{font-family:var(--mono); background:#E3E7ED; padding:1px 5px; font-size:11.5px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title">
+      <h1>제안요청서 과업 추출 콘솔</h1>
+      <p>PDF를 올리면 각 문서의 기능요구사항(SFR)을 한 표로 정리합니다 · 모델 <span class="mono">gemini-flash-latest</span></p>
+    </div>
+    <div class="ledger" id="ledger">
+      <div class="cell"><div class="k">파일</div><div class="v" id="m-total">0</div></div>
+      <div class="cell"><div class="k">완료</div><div class="v accent" id="m-done">0</div></div>
+      <div class="cell"><div class="k">실패</div><div class="v" id="m-err">0</div></div>
+      <div class="cell"><div class="k">과업</div><div class="v" id="m-rows">0</div></div>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- 좌: 설정 -->
+    <section class="panel">
+      <h2>설정</h2>
+      <div class="body">
+        <label class="field">
+          <span class="lab">Gemini API 키 <span class="hint">이 브라우저에만 보관</span></span>
+          <input type="password" id="apikey" class="mono" placeholder="AIza..." autocomplete="off" />
+          <div class="check"><input type="checkbox" id="remember" /><label for="remember">이 브라우저에 키 저장(localStorage)</label></div>
+        </label>
+
+        <div class="row2">
+          <label class="field">
+            <span class="lab">모델</span>
+            <input type="text" id="model" class="mono" value="gemini-flash-latest" />
+          </label>
+          <label class="field">
+            <span class="lab">요청 간격(초) <span class="hint">무료=4.5</span></span>
+            <input type="number" id="interval" value="4.5" min="0" step="0.5" />
+          </label>
+        </div>
+
+        <details class="prompt">
+          <summary>분석 프롬프트 / 분류 기준 (수정 가능)</summary>
+          <div class="body">
+            <textarea id="userprompt" spellcheck="false"></textarea>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- 우: 입력 + 진행 + 결과 -->
+    <div>
+      <section class="panel" style="margin-bottom:22px">
+        <h2>PDF</h2>
+        <div class="body">
+          <div class="drop" id="drop">
+            <strong>PDF를 끌어다 놓거나 클릭해서 선택</strong>
+            여러 개 한꺼번에 가능 · 파일은 어디에도 업로드되지 않습니다
+          </div>
+          <input type="file" id="filein" accept="application/pdf" multiple hidden />
+
+          <div class="btns">
+            <button class="primary" id="start" disabled>추출 시작</button>
+            <button class="ghost" id="pause" disabled>일시정지</button>
+            <button class="ghost" id="dl-xlsx" disabled>XLSX 내려받기</button>
+            <button class="ghost" id="dl-csv" disabled>CSV 내려받기</button>
+            <button class="danger" id="reset" disabled>완료기록 초기화</button>
+          </div>
+
+          <div class="progress-wrap" id="pwrap">
+            <div class="bar"><i id="pbar"></i></div>
+            <div class="progress-meta"><span id="pnow">0 / 0</span><span id="pmsg">대기</span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="banner" id="banner"></div>
+
+      <section class="panel" style="margin-bottom:22px">
+        <h2>파일 처리 현황</h2>
+        <div class="files" id="files"><div class="empty-files">아직 추가된 PDF가 없습니다.</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="result-head">
+          <h2>통합 결과</h2>
+          <span class="fstat" id="rcount">0 행</span>
+        </div>
+        <div class="tablewrap"><table class="out" id="outtable"><thead></thead><tbody></tbody></table></div>
+        <div class="preview-note" id="pnote" style="display:none"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    키는 이 브라우저에서만 사용되며 어떤 서버에도 전송·저장되지 않습니다. 호출은 사용자의 API 키와 할당량으로 직접 이뤄집니다.<br>
+    스캔본(이미지) PDF는 텍스트가 추출되지 않아 과업이 0건으로 나올 수 있습니다 · 무료 등급은 분당/일일 한도가 있어 막히면 잠시 후 이어서 진행하면 됩니다(완료분은 자동 저장).
+  </footer>
+</div>
+
+<script>
+const COLUMNS = ["연번","사업명","제목","기관명","과업요약","기능영역","업무영역"];
+const TAG_COLS = new Set(["기능영역","업무영역"]);
+
+const SYSTEM_PROMPT =
+`당신은 공공 제안요청서(RFP) 분석 전문가입니다.
+결과를 JSON 배열로만 출력합니다. 각 원소(객체)는 정확히 다음 키만 가집니다:
+"연번","사업명","제목","기관명","과업요약","기능영역","업무영역".
+과업(기능 요구사항, SFR)을 처음부터 끝까지 하나도 빠짐없이 모두 포함하세요.
+사업명은 문서 전체가 대상으로 하는 사업·용역의 공식 명칭으로 같은 문서의 모든 행에 동일하게 기입하고,
+제목은 개별 과업의 이름입니다. 값은 모두 문자열로 작성합니다.`;
+
+const DEFAULT_USER_PROMPT =
+`첨부된 제안요청서를 읽고 핵심 과업(기능 요구사항, SFR)이 몇 번까지 있는지 파악해.
+처음부터 끝까지 하나도 빠짐없이, 과업 하나를 한 행으로 하여
+연번 / 사업명 / 제목(과업명) / 기관명 / 과업요약 / 기능영역 / 업무영역 으로 정리해줘.
+
+과업별 기능영역·업무영역은 아래 기준에 따라 분류해:
+
+[기능영역] 문서 생성·작성, 검색·질의응답, 요약·번역, 검증·감별, 분석·예측, 추천·매칭, 자동화·워크플로우, 모니터링·이상탐지, 대시보드·시각화, 데이터 관리·구축, 멀티모달(영상·음성·OCR), 외부 시스템 연동, 인증·권한관리, 시스템·플랫폼 구축, 전략·컨설팅(ISP/ISMP)
+
+[업무영역] 행정문서(결재·공문·기안), 규정·법령, 보고서·보도, 상담·민원, 감사·컨설팅, 연구·평가, 재무·회계, 인사·근태, 협업·커뮤니케이션, 데이터 플랫폼, 분석 서비스(대민), AI 인프라·모델 관리`;
+
+const RESPONSE_SCHEMA = {
+  type:"ARRAY",
+  items:{
+    type:"OBJECT",
+    properties:Object.fromEntries(COLUMNS.map(c=>[c,{type:"STRING"}])),
+    propertyOrdering:COLUMNS
+  }
+};
+
+// pdf.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ── 상태 ──
+let items = [];            // {id,file,name,size,status,count,rows,error}
+let running=false, paused=false, quotaStopped=false;
+const LS = { key:"rfp:safe", get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},
+             set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},
+             del:k=>{try{localStorage.removeItem(k)}catch(e){}} };
+const cacheKey = f => "rfp:cache:" + f.name + ":" + f.size;
+
+// ── DOM ──
+const $ = id => document.getElementById(id);
+const elDrop=$("drop"), elFileIn=$("filein"), elFiles=$("files"),
+      elStart=$("start"), elPause=$("pause"), elReset=$("reset"),
+      elDlX=$("dl-xlsx"), elDlC=$("dl-csv"),
+      elPwrap=$("pwrap"), elPbar=$("pbar"), elPnow=$("pnow"), elPmsg=$("pmsg"),
+      elBanner=$("banner"), elApi=$("apikey"), elModel=$("model"),
+      elInterval=$("interval"), elPrompt=$("userprompt"), elRemember=$("remember");
+
+elPrompt.value = DEFAULT_USER_PROMPT;
+
+// 저장된 키 복원
+(function(){ const k=LS.get("rfp:apikey"); if(k){ elApi.value=k; elRemember.checked=true; } })();
+elApi.addEventListener("input", syncStartEnabled);
+elRemember.addEventListener("change", ()=>{ if(elRemember.checked) LS.set("rfp:apikey",elApi.value); else LS.del("rfp:apikey"); });
+elApi.addEventListener("input", ()=>{ if(elRemember.checked) LS.set("rfp:apikey",elApi.value); });
+
+// ── 파일 추가 ──
+elDrop.addEventListener("click", ()=>elFileIn.click());
+["dragover","dragenter"].forEach(ev=>elDrop.addEventListener(ev,e=>{e.preventDefault();elDrop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>elDrop.addEventListener(ev,e=>{e.preventDefault();elDrop.classList.remove("over")}));
+elDrop.addEventListener("drop", e=>addFiles(e.dataTransfer.files));
+elFileIn.addEventListener("change", e=>addFiles(e.target.files));
+
+function addFiles(fileList){
+  const arr=[...fileList].filter(f=>f.type==="application/pdf"||f.name.toLowerCase().endsWith(".pdf"));
+  for(const f of arr){
+    if(items.some(i=>i.name===f.name && i.size===f.size)) continue; // 중복 방지
+    const it={id:crypto.randomUUID(), file:f, name:f.name, size:f.size, status:"대기", count:0, rows:null, error:null};
+    // 캐시 복원(이어하기)
+    const cached=LS.get(cacheKey(f));
+    if(cached){ try{ const r=JSON.parse(cached); if(Array.isArray(r)){ it.rows=r; it.count=r.length; it.status="완료"; } }catch(e){} }
+    items.push(it);
+  }
+  renderFiles(); renderMetrics(); syncStartEnabled(); rebuildTable();
+}
+
+function syncStartEnabled(){
+  const ready = elApi.value.trim() && items.some(i=>i.status!=="완료") && !running;
+  elStart.disabled=!ready;
+  elReset.disabled = !items.some(i=>i.status==="완료") || running;
+  const anyRows = items.some(i=>i.rows && i.rows.length);
+  elDlX.disabled=!anyRows; elDlC.disabled=!anyRows;
+}
+
+// ── PDF 텍스트 추출 ──
+async function extractText(file){
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    out.push(tc.items.map(i=>i.str).join(" "));
+  }
+  return out.join("\n");
+}
+
+// ── Gemini 호출 ──
+async function callGemini(text){
+  const model=elModel.value.trim()||"gemini-flash-latest";
+  const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
+  const body={
+    systemInstruction:{parts:[{text:SYSTEM_PROMPT}]},
+    contents:[{role:"user",parts:[{text:elPrompt.value+"\n\n=== 제안요청서 본문 ===\n"+text}]}],
+    generationConfig:{temperature:0,maxOutputTokens:32768,responseMimeType:"application/json",responseSchema:RESPONSE_SCHEMA}
+  };
+  const MAX=6;
+  let lastErr=null;
+  for(let attempt=1;attempt<=MAX;attempt++){
+    let res;
+    try{
+      res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":elApi.value.trim()},body:JSON.stringify(body)});
+    }catch(e){ lastErr=e.message; await sleep(2000*attempt); continue; }
+
+    if(res.status===200){
+      const data=await res.json();
+      const cand=data.candidates&&data.candidates[0];
+      const txt=cand&&cand.content&&cand.content.parts?cand.content.parts.map(p=>p.text||"").join(""):"";
+      return parseRows(txt);
+    }
+    const errText=await res.text();
+    if(res.status===429){                       // 할당량(분당/일일) 소진
+      if(attempt>=2){ const e=new Error(errText); e.quota=true; throw e; }
+      await sleep(21000);                        // 분당 한도면 1회 대기 후 재확인
+      continue;
+    }
+    if([500,502,503,504].includes(res.status)){  // 서버 과부하 → 백오프
+      lastErr="HTTP "+res.status; await sleep(Math.min(2**attempt,60)*1000+Math.random()*2000); continue;
+    }
+    throw new Error("HTTP "+res.status+": "+errText.slice(0,300)); // 그 외 즉시 실패
+  }
+  throw new Error("재시도 실패: "+lastErr);
+}
+
+function parseRows(txt){
+  if(!txt) throw new Error("빈 응답");
+  let t=txt.trim().replace(/^```(?:json)?/,"").replace(/```$/,"").trim();
+  const s=t.indexOf("["), e=t.lastIndexOf("]");
+  if(s>=0&&e>s) t=t.slice(s,e+1);
+  const arr=JSON.parse(t);
+  if(!Array.isArray(arr)) throw new Error("배열 아님");
+  return arr.map(r=>{const o={};COLUMNS.forEach(c=>o[c]=String(r&&r[c]!=null?r[c]:"").trim());return o;});
+}
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ── 배치 실행 ──
+elStart.addEventListener("click", run);
+elPause.addEventListener("click", ()=>{ paused=true; elPmsg.textContent="일시정지 중…"; });
+elReset.addEventListener("click", ()=>{
+  if(!confirm("완료 기록(캐시)을 모두 지울까요? 다시 돌리면 처음부터 호출합니다.")) return;
+  items.forEach(i=>{ LS.del(cacheKey(i.file)); if(i.status==="완료"){i.status="대기";i.rows=null;i.count=0;} });
+  renderFiles(); renderMetrics(); rebuildTable(); syncStartEnabled();
+});
+
+async function run(){
+  if(running) return;
+  running=true; paused=false; quotaStopped=false;
+  hideBanner(); elStart.disabled=true; elPause.disabled=false; elReset.disabled=true;
+  elPwrap.classList.add("show");
+
+  const interval=Math.max(0,parseFloat(elInterval.value)||0)*1000;
+  const todo=items.filter(i=>i.status!=="완료");
+  let processed=0;
+
+  for(const it of items){
+    if(paused||quotaStopped) break;
+    if(it.status==="완료") continue;
+
+    setStatus(it,"추출"); updateProgress(processed,todo.length,"텍스트 추출: "+it.name);
+    let text="";
+    try{ text=await extractText(it.file); }
+    catch(e){ it.error="PDF 추출 실패"; setStatus(it,"실패"); processed++; continue; }
+
+    setStatus(it,"요약"); updateProgress(processed,todo.length,"요약 중: "+it.name);
+    try{
+      const rows=await callGemini(text);
+      it.rows=rows; it.count=rows.length; it.error=null; setStatus(it,"완료");
+      LS.set(cacheKey(it.file), JSON.stringify(rows));
+      rebuildTable(); renderMetrics();
+    }catch(e){
+      if(e.quota){ quotaStopped=true; setStatus(it,"대기"); showQuota(); break; }
+      it.error=(e.message||"오류").slice(0,80); setStatus(it,"실패");
+    }
+    processed++;
+    updateProgress(processed,todo.length,"");
+    if(interval && processed<todo.length && !paused && !quotaStopped) await sleep(interval);
+  }
+
+  running=false; elPause.disabled=true;
+  syncStartEnabled(); renderMetrics(); rebuildTable();
+
+  const remaining=items.filter(i=>i.status!=="완료").length;
+  if(!quotaStopped){
+    if(remaining===0 && items.length){ showDone(); elPmsg.textContent="완료"; }
+    else if(paused){ elPmsg.textContent="일시정지됨 — 남은 "+remaining+"개"; }
+  }
+  updateProgress(items.filter(i=>i.status==="완료").length, items.length, elPmsg.textContent);
+}
+
+// ── 렌더 ──
+function setStatus(it,s){ it.status=s; renderFiles(); }
+function statusInfo(s){
+  if(s==="완료") return {cls:"done",tick:"done",mark:"✓"};
+  if(s==="추출"||s==="요약") return {cls:"run",tick:"run",mark:""};
+  if(s==="실패") return {cls:"err",tick:"err",mark:"!"};
+  return {cls:"",tick:"skip",mark:""};
+}
+function renderFiles(){
+  if(!items.length){ elFiles.innerHTML='<div class="empty-files">아직 추가된 PDF가 없습니다.</div>'; return; }
+  elFiles.innerHTML="";
+  for(const it of items){
+    const inf=statusInfo(it.status);
+    const stat = it.status==="완료" ? ("과업 "+it.count+"개")
+               : it.status==="실패" ? (it.error||"실패")
+               : it.status==="추출" ? "텍스트 추출…"
+               : it.status==="요약" ? "요약 중…" : "대기";
+    const div=document.createElement("div"); div.className="file";
+    div.innerHTML=
+      '<div class="tick '+inf.tick+'">'+inf.mark+'</div>'+
+      '<div class="fname" title="'+esc(it.name)+'">'+esc(it.name)+'</div>'+
+      '<div class="fstat '+inf.cls+'">'+esc(stat)+'</div>';
+    elFiles.appendChild(div);
+  }
+}
+function renderMetrics(){
+  const done=items.filter(i=>i.status==="완료").length;
+  const err=items.filter(i=>i.status==="실패").length;
+  const rows=items.reduce((a,i)=>a+(i.rows?i.rows.length:0),0);
+  $("m-total").textContent=items.length;
+  $("m-done").textContent=done;
+  $("m-err").textContent=err;
+  $("m-rows").textContent=rows;
+}
+function updateProgress(now,total,msg){
+  elPnow.textContent=now+" / "+total;
+  elPbar.style.width=(total?Math.round(now/total*100):0)+"%";
+  if(msg!==undefined && msg!=="") elPmsg.textContent=msg;
+}
+
+function allRecords(){
+  const recs=[];
+  for(const it of items){ if(it.rows) for(const r of it.rows){ recs.push(Object.assign({"원본파일":it.name}, r)); } }
+  return recs;
+}
+function rebuildTable(){
+  const recs=allRecords();
+  const thead=document.querySelector("#outtable thead");
+  const tbody=document.querySelector("#outtable tbody");
+  const cols=["원본파일",...COLUMNS];
+  thead.innerHTML="<tr>"+cols.map(c=>"<th>"+c+"</th>").join("")+"</tr>";
+  const CAP=400;
+  const shown=recs.slice(0,CAP);
+  tbody.innerHTML=shown.map(r=>"<tr>"+cols.map(c=>{
+    const cls = c==="연번" ? "num" : (TAG_COLS.has(c)?"tag":"");
+    return "<td class='"+cls+"'>"+esc(r[c]||"")+"</td>";
+  }).join("")+"</tr>").join("");
+  $("rcount").textContent=recs.length+" 행";
+  const note=$("pnote");
+  if(recs.length>CAP){ note.style.display="block"; note.textContent="미리보기는 상위 "+CAP+"행만 표시합니다. 전체는 내려받기로 확인하세요."; }
+  else note.style.display="none";
+  syncStartEnabled();
+}
+
+// ── 내려받기 ──
+elDlC.addEventListener("click", ()=>{
+  const recs=allRecords(); const cols=["원본파일",...COLUMNS];
+  const esc=v=>{v=String(v==null?"":v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  let csv=cols.join(",")+"\n"+recs.map(r=>cols.map(c=>esc(r[c])).join(",")).join("\n");
+  download("\uFEFF"+csv,"consolidated.csv","text/csv;charset=utf-8");
+});
+elDlX.addEventListener("click", ()=>{
+  const recs=allRecords(); const cols=["원본파일",...COLUMNS];
+  const ws=XLSX.utils.json_to_sheet(recs,{header:cols});
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"과업");
+  XLSX.writeFile(wb,"consolidated.xlsx");
+});
+function download(content,name,type){
+  const blob=new Blob([content],{type}); const u=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=u; a.download=name; a.click(); URL.revokeObjectURL(u);
+}
+
+// ── 배너 ──
+function showQuota(){
+  const done=items.filter(i=>i.status==="완료").length, rem=items.length-done;
+  elBanner.className="banner quota show";
+  elBanner.innerHTML="<b>무료 등급 할당량(quota)에 도달해 멈췄습니다 — 완료 "+done+"개 / 남음 "+rem+"개</b>"+
+    "진행분은 이 브라우저에 저장돼서, 아래 중 하나로 이어서 끝낼 수 있어요."+
+    "<ol><li>잠시(분당 한도면 1분, 일일 한도면 리셋 후) 뒤 <b>추출 시작</b>을 다시 누르면 남은 것부터 이어집니다.</li>"+
+    "<li>더 빨리 끝내려면 AI Studio에서 결제(유료 등급)를 연결하고 요청 간격을 0으로 낮추세요.</li></ol>";
+  elPmsg.textContent="할당량 도달 — 이어하기 가능";
+}
+function showDone(){
+  elBanner.className="banner done show";
+  elBanner.innerHTML="<b>전체 완료</b>총 "+items.length+"개 파일 · "+allRecords().length+"행. XLSX/CSV로 내려받으세요.";
+}
+function hideBanner(){ elBanner.className="banner"; }
+
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+renderMetrics();
+</script>
+</body>
+</html>
