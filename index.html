@@ -138,6 +138,31 @@
   footer{margin-top:30px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:11.5px; line-height:1.7}
   code{font-family:var(--mono); background:#E3E7ED; padding:1px 5px; font-size:11.5px}
   a{color:var(--accent)}
+
+  /* ── 모달: API 키 발급 안내 ── */
+  .modal-bg{position:fixed; inset:0; background:rgba(20,23,31,.5); display:none; align-items:center; justify-content:center; z-index:60; padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--surface); border:1px solid var(--line-strong); max-width:560px; width:100%; max-height:88vh; overflow:auto}
+  .modal .mhead{display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:2px solid var(--ink)}
+  .modal .mhead h3{margin:0; font-size:16px; font-weight:800; letter-spacing:-.01em}
+  .modal .mhead button{font-size:20px; line-height:1; color:var(--muted); padding:2px 6px}
+  .modal .mhead button:hover{color:var(--ink)}
+  .modal .mbody{padding:20px}
+  .modal .lead{font-size:13px; color:var(--muted); margin:0 0 18px}
+  .modal .lead b{color:var(--ink)}
+  .steps{list-style:none; margin:0; padding:0; counter-reset:step}
+  .steps li{display:grid; grid-template-columns:28px 1fr; gap:13px; padding-bottom:18px; position:relative}
+  .steps li:not(:last-child)::after{content:""; position:absolute; left:13px; top:30px; bottom:2px; width:1px; background:var(--line)}
+  .steps li .n{counter-increment:step; width:26px; height:26px; border:1.5px solid var(--accent); color:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:13px; font-weight:600; background:var(--surface); z-index:1}
+  .steps li .n::before{content:counter(step)}
+  .steps li .c{font-size:13.5px; padding-top:2px}
+  .steps li .c b{font-weight:700}
+  .steps li .c .sub{display:block; color:var(--muted); font-size:12px; margin-top:3px}
+  .modal .openbtn{display:inline-block; margin-top:4px; background:var(--accent); color:#fff; padding:9px 15px; font-size:13px; font-weight:600; text-decoration:none}
+  .modal .openbtn:hover{background:var(--accent-dk)}
+  .modal .warn-note{margin-top:18px; padding:12px 14px; background:var(--warn-bg); border-left:3px solid var(--warn); font-size:12.5px; line-height:1.6}
+  .modal .links{margin-top:16px; padding-top:14px; border-top:1px solid var(--line); font-size:12px; color:var(--muted)}
+  .modal .links a{display:inline-block; margin-right:14px}
 </style>
 </head>
 <body>
@@ -163,7 +188,7 @@
       <h2>설정</h2>
       <div class="body">
         <label class="field">
-          <span class="lab">Gemini API 키 <span class="hint">이 브라우저에만 보관</span></span>
+          <span class="lab">Gemini API 키 <span class="hint"><a id="help-key" style="cursor:pointer">🔑 발급 방법</a> · 이 브라우저에만 보관</span></span>
           <input type="password" id="apikey" class="mono" placeholder="AIza..." autocomplete="off" />
           <div class="check"><input type="checkbox" id="remember" /><label for="remember">이 브라우저에 키 저장(localStorage)</label></div>
         </label>
@@ -239,6 +264,40 @@
     키는 이 브라우저에서만 사용되며 어떤 서버에도 전송·저장되지 않습니다. 호출은 사용자의 API 키와 할당량으로 직접 이뤄집니다.<br>
     스캔본(이미지) PDF는 텍스트가 추출되지 않아 과업이 0건으로 나올 수 있습니다 · 무료 등급은 분당/일일 한도가 있어 막히면 잠시 후 이어서 진행하면 됩니다(완료분은 자동 저장).
   </footer>
+</div>
+
+<!-- ── API 키 발급 안내 모달 ── -->
+<div class="modal-bg" id="keymodal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="km-title">
+    <div class="mhead">
+      <h3 id="km-title">Gemini API 키 발급 방법</h3>
+      <button id="km-close" aria-label="닫기">×</button>
+    </div>
+    <div class="mbody">
+      <p class="lead">Google 계정만 있으면 <b>2분</b>이면 됩니다. <b>신용카드 불필요·무료</b>예요. 아래 버튼으로 발급 페이지를 연 뒤 순서대로 따라 하세요.</p>
+
+      <a class="openbtn" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">발급 페이지 열기 ↗</a>
+
+      <ol class="steps" style="margin-top:20px">
+        <li><span class="n"></span><span class="c"><b>Google AI Studio 발급 페이지 접속</b><span class="sub">위 "발급 페이지 열기" 버튼을 누르고, Google 계정으로 로그인합니다. (회사 또는 개인 계정 모두 가능)</span></span></li>
+        <li><span class="n"></span><span class="c"><b>"API 키 만들기"(Create API key) 클릭</b><span class="sub">화면 가운데 또는 우측의 파란 버튼입니다.</span></span></li>
+        <li><span class="n"></span><span class="c"><b>프로젝트 선택</b><span class="sub">창이 뜨면 "새 프로젝트에서 API 키 만들기"를 고릅니다. (기존 프로젝트가 있으면 그것을 선택해도 됩니다.)</span></span></li>
+        <li><span class="n"></span><span class="c"><b>키 복사</b><span class="sub">잠시 후 <code>AIza…</code> 로 시작하는 키가 생성됩니다. 옆의 복사 아이콘을 눌러 복사합니다.</span></span></li>
+        <li><span class="n"></span><span class="c"><b>이 화면에 붙여넣기</b><span class="sub">왼쪽 "Gemini API 키" 칸에 붙여넣으면 끝. "모델 불러오기"로 모델 목록까지 확인하면 준비 완료입니다.</span></span></li>
+      </ol>
+
+      <div class="warn-note">
+        API 키는 <b>비밀번호처럼</b> 다뤄 주세요. 외부에 공유하거나 화면에 노출하지 않는 게 좋습니다. 이 도구는 키를 어떤 서버에도 보내지 않고 이 브라우저에서만 사용합니다.<br>
+        무료 등급은 분당·일일 요청 한도가 있어, 많이 막히면 잠시 뒤(또는 한도 리셋 후) "추출 시작"을 다시 누르면 남은 것부터 이어집니다.
+      </div>
+
+      <div class="links">
+        그림과 함께 보는 자세한 가이드:
+        <a href="https://www.elancer.co.kr/blog/detail/1020" target="_blank" rel="noopener">이랜서 블로그</a>
+        <a href="https://rubric.im/tips/google-ai-studio-gemini-api-key" target="_blank" rel="noopener">Rubric Labs</a>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -585,6 +644,14 @@ function hideBanner(){ elBanner.className="banner"; }
 function esc(s){ return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 renderMetrics();
+
+// ── API 키 발급 안내 모달 ──
+const elKeyModal=$("keymodal");
+$("help-key").addEventListener("click", ()=>elKeyModal.classList.add("show"));
+$("km-close").addEventListener("click", ()=>elKeyModal.classList.remove("show"));
+elKeyModal.addEventListener("click", e=>{ if(e.target===elKeyModal) elKeyModal.classList.remove("show"); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") elKeyModal.classList.remove("show"); });
+
 </script>
 </body>
 </html>
