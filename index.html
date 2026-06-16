@@ -170,8 +170,11 @@
 
         <div class="row2">
           <label class="field">
-            <span class="lab">모델</span>
-            <input type="text" id="model" class="mono" value="gemini-flash-latest" />
+            <span class="lab">모델 <span class="hint" id="model-hint">키 입력 후 불러오기</span></span>
+            <div style="display:flex; gap:6px">
+              <select id="model" style="flex:1"><option value="gemini-flash-latest">gemini-flash-latest</option></select>
+              <button class="ghost" id="loadmodels" type="button" style="padding:9px 12px; white-space:nowrap">불러오기</button>
+            </div>
           </label>
           <label class="field">
             <span class="lab">요청 간격(초) <span class="hint">무료=4.5</span></span>
@@ -298,6 +301,44 @@ elPrompt.value = DEFAULT_USER_PROMPT;
 elApi.addEventListener("input", syncStartEnabled);
 elRemember.addEventListener("change", ()=>{ if(elRemember.checked) LS.set("rfp:apikey",elApi.value); else LS.del("rfp:apikey"); });
 elApi.addEventListener("input", ()=>{ if(elRemember.checked) LS.set("rfp:apikey",elApi.value); });
+
+// ── 모델 목록 불러오기 ──
+const elLoad=$("loadmodels"), elModelHint=$("model-hint");
+elLoad.addEventListener("click", loadModels);
+async function loadModels(){
+  const key=elApi.value.trim();
+  if(!key){ elModelHint.textContent="키를 먼저 입력하세요"; return; }
+  const prev=elModel.value;
+  elLoad.disabled=true; elModelHint.textContent="불러오는 중…";
+  try{
+    let names=[], pageToken="";
+    for(let i=0;i<5;i++){
+      const url="https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"+(pageToken?"&pageToken="+encodeURIComponent(pageToken):"");
+      const res=await fetch(url,{headers:{"x-goog-api-key":key}});
+      if(!res.ok){ const t=await res.text(); throw new Error("HTTP "+res.status+": "+t.slice(0,140)); }
+      const data=await res.json();
+      (data.models||[]).forEach(m=>{
+        if((m.supportedGenerationMethods||[]).includes("generateContent"))
+          names.push((m.name||"").replace(/^models\//,""));
+      });
+      if(!data.nextPageToken) break;
+      pageToken=data.nextPageToken;
+    }
+    names=[...new Set(names)].sort((a,b)=>{
+      const ga=a.startsWith("gemini"), gb=b.startsWith("gemini");
+      if(ga!==gb) return ga?-1:1;
+      return a.localeCompare(b);
+    });
+    if(!names.length){ elModelHint.textContent="생성 가능한 모델 없음"; return; }
+    elModel.innerHTML=names.map(n=>"<option value='"+esc(n)+"'>"+esc(n)+"</option>").join("");
+    elModel.value = names.includes(prev)?prev : (names.includes("gemini-flash-latest")?"gemini-flash-latest":names[0]);
+    elModelHint.textContent=names.length+"개 · "+elModel.value;
+  }catch(e){
+    elModelHint.textContent="실패: "+(e.message||"").slice(0,40);
+  }finally{
+    elLoad.disabled=false;
+  }
+}
 
 // ── 파일 추가 ──
 elDrop.addEventListener("click", ()=>elFileIn.click());
